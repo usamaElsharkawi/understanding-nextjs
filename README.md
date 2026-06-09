@@ -99,3 +99,61 @@ Next.js uses folder naming conventions to create dynamic routes:
 | `app/docs/[...slug]` | ❌ 404 | ✅ | `["a", "b"]` |
 | `app/docs/[[...slug]]` | ✅ | ✅ | `undefined` / `["a", "b"]` |
 </details>
+
+<details>
+<summary><b>7. Intercepting Routes</b></summary>
+
+Intercepting routes allows you to load a route from another part of your application within the current layout. This routing paradigm is useful when you want to display the content of a route without the user switching to a different context.
+
+#### What is "Context"?
+*   **Technical Context (React State & DOM):** Standard navigation unmounts the current page, destroying its local state (inputs, filters, video playback status). With intercepting routes, the current page remains mounted in the background, fully preserving its React state and DOM nodes.
+*   **UX Context (User Flow & Scroll Position):** Standard navigation changes the whole screen canvas and resets scroll positions. Intercepting routes preserves the scroll position of the background feed (e.g. infinite scroll) and overlays the target route (typically inside a modal or slide-over panel).
+
+#### Convention Syntax
+Next.js resolves relative levels based on **URL segments** (not physical directories; Route Groups like `(admin)` are ignored):
+*   **`(.)`** matches segments on the **same level**
+*   **`(..)`** matches segments **one level above**
+*   **`(..)(..)`** matches segments **two levels above**
+*   **`(...)`** matches segments from the **root** `app` directory
+
+#### Navigation Behavior
+*   **Soft Navigation (Client-Side Link):** Triggered when clicking a `<Link>` component. Next.js intercepts the route and displays the intercepted layout/component (e.g., inside a modal). The URL is updated.
+*   **Hard Navigation (Direct Access/Refresh):** Triggered when a user refreshes the page or accesses the URL directly. Next.js bypasses the interceptor and serves the full, standalone destination page.
+</details>
+
+<details>
+<summary><b>8. Parallel Routes</b></summary>
+
+Parallel Routes allow you to simultaneously or conditionally render one or more pages in the same layout. They act as independent slots that can have their own sub-folders, loading states, error states, and route segments.
+
+#### Folder Convention: Slots (`@`)
+Parallel Routes are created using named **slots** marked with the `@` prefix (e.g., `@analytics`, `@team`).
+*   Slots are **not** URL route segments. They do not affect the URL path.
+*   They are passed to the parent layout as named props rather than being grouped inside `{children}`.
+
+```jsx
+// app/layout.js
+export default function Layout({ children, analytics, team }) {
+  return (
+    <div>
+      {children}
+      <div>{analytics}</div>
+      <div>{team}</div>
+    </div>
+  );
+}
+```
+
+#### Why Use Parallel Routes?
+1.  **Independent Streaming & Skeleton Loading:** Wrap slow widgets in their own `loading.js` so they load independently without blocking the rest of the layout.
+2.  **Isolated Error Boundaries:** Wrap widgets in their own `error.js` so a failure in one section (e.g., database timeout) doesn't crash the entire dashboard.
+3.  **Independent Sub-Routing:** Each slot can navigate independently (e.g. `/dashboard/settings` loads `@analytics/settings/page.js` while keeping the `@team` slot on its active or default view).
+4.  **Conditional Rendering:** Show slots dynamically based on user role (e.g., rendering `@admin` vs. `@user` in `layout.js`).
+
+#### The Crucial Fallback: `default.js`
+*   **The Issue:** On hard navigation (page refresh or direct URL entry), Next.js matches all slots against the current URL. If a slot doesn't have a folder matching the new path, Next.js does not know what to render.
+*   **The Consequence:** If any slot lacks a match and lacks a `default.js` file, Next.js will throw a **404 error** for the entire layout.
+*   **The Solution:** You **must** define a `default.js` file (often returning `null` or a fallback component) inside every slot to serve as a fallback.
+</details>
+
+
