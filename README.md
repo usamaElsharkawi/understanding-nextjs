@@ -151,9 +151,73 @@ export default function Layout({ children, analytics, team }) {
 4.  **Conditional Rendering:** Show slots dynamically based on user role (e.g., rendering `@admin` vs. `@user` in `layout.js`).
 
 #### The Crucial Fallback: `default.js`
-*   **The Issue:** On hard navigation (page refresh or direct URL entry), Next.js matches all slots against the current URL. If a slot doesn't have a folder matching the new path, Next.js does not know what to render.
 *   **The Consequence:** If any slot lacks a match and lacks a `default.js` file, Next.js will throw a **404 error** for the entire layout.
 *   **The Solution:** You **must** define a `default.js` file (often returning `null` or a fallback component) inside every slot to serve as a fallback.
 </details>
+
+<details>
+<summary><b>9. React Server Components (RSC) vs. Client Components</b></summary>
+
+In the Next.js App Router, components are divided into two main categories: **Server Components** (default) and **Client Components** (declared with `"use client"`).
+
+| Feature | Server Component (Default) | Client Component (`'use client'`) |
+| :--- | :--- | :--- |
+| **Execution Location** | Server only | Server (initial HTML) $\rightarrow$ Browser (hydration) |
+| **Client JS Sent** | ❌ **0 KB** | ✅ **Included in bundle** |
+| **Interactivity (onClick, etc.)** | ❌ No | ✅ Yes |
+| **Hooks (`useState`, `useEffect`)** | ❌ No | ✅ Yes |
+| **Browser APIs (`window`, `localStorage`)**| ❌ No | ✅ Yes |
+| **Direct DB Connection** | ✅ Yes | ❌ No (requires public API endpoint) |
+
+#### Composition Rules
+1.  **Server Component imports Client Component:** Fully supported. Recommended for passing fetched server data to interactive client boundaries.
+2.  **Client Component imports Server Component:** ❌ **Forbidden**. Direct imports will force the Server Component to compile as a Client Component, crashing if it contains server-only code.
+3.  **The children Slot Pattern:** To render a Server Component inside a Client Component, pass it as a `children` prop (or any layout slot) from a parent Server Component:
+    ```jsx
+    // ClientComponent.jsx ('use client')
+    export default function ClientComponent({ children }) {
+      return <div className="client-wrapper">{children}</div>;
+    }
+
+    // Page.jsx (Server Component)
+    import ClientComponent from './ClientComponent';
+    import ServerChild from './ServerChild';
+    export default function Page() {
+      return <ClientComponent><ServerChild /></ClientComponent>;
+    }
+    ```
+</details>
+
+<details>
+<summary><b>10. Server-Side Rendering (SSR) vs. React Server Components (RSC)</b></summary>
+
+While both execute code on the server, they address completely different concerns:
+
+*   **RSC is an Architecture (Component Type):** It determines **where** code runs. RSCs run exclusively on the server, allowing direct database queries and keeping heavy dependencies off the client bundle (Zero Bundle Size).
+*   **SSR is a Rendering Process (Technique):** It determines **how** the initial page is loaded. It takes a React component tree (consisting of both RSCs and Client Components) and compiles it into a static **HTML string** on the initial page load so the browser displays content immediately (FCP/LCP optimization).
+
+#### How They Work Together
+1.  On **Initial Page Load / Refresh**, the server renders the RSC tree to produce a description (RSC Payload), and then SSR converts that description into raw **HTML**. The browser receives **both** the HTML and the RSC Payload.
+2.  On **Client-Side (Soft) Navigation**, the server renders *only* the new RSC tree, generating and sending **only the RSC Payload**. The client React router diffs and updates the DOM in-place without triggering a full page reload.
+</details>
+
+<details>
+<summary><b>11. The Hydration Process</b></summary>
+
+**Hydration** is the process where client-side JavaScript attaches event listeners, state, and reactivity to the static HTML pre-rendered by the server, turning a "dry/static" page into a "live" interactive React application.
+
+#### The Technical Flow
+1.  **Server:** Pre-renders layouts and components into static HTML. Sends the HTML along with the RSC Payload and JS chunks to the browser.
+2.  **Browser (Painting):** Parses the HTML and immediately paints the UI (FCP). At this stage, text and buttons are visible, but clicking them does nothing.
+3.  **Browser (Execution):** Loads and runs the Client Component JavaScript bundles.
+4.  **Hydration:** React reads the RSC Payload, walks the DOM, and binds event listeners and React state directly to the existing HTML elements without re-rendering the layout.
+
+#### Hydration Mismatch Error
+This error occurs when the initial HTML rendered on the server differs from the initial component tree React expects in the browser. Common causes include:
+*   Using dynamic client data on the server (e.g. `new Date()` showing server time vs client time).
+*   Using random values (`Math.random()`).
+*   Invalid HTML structures (e.g., nesting a `<div>` inside a `<p>` tag), which the browser's parser automatically corrects, causing a mismatch with React's expectation.
+</details>
+
 
 
