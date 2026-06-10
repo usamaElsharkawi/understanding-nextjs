@@ -219,5 +219,157 @@ This error occurs when the initial HTML rendered on the server differs from the 
 *   Invalid HTML structures (e.g., nesting a `<div>` inside a `<p>` tag), which the browser's parser automatically corrects, causing a mismatch with React's expectation.
 </details>
 
+---
 
+# 🔌 Module 5: Backend Route Handlers
 
+<details>
+<summary><b>12. What are Route Handlers?</b></summary>
+
+**Route Handlers** are backend API endpoints built directly into your Next.js application. They allow you to create custom request handlers for any route, using the standard Web `Request` and `Response` APIs. Instead of serving HTML to a browser, they serve raw data (JSON), file downloads, webhooks, or any other HTTP response.
+
+#### They are NOT the same as Server Components
+*   **Server Components** run on the server to fetch data and render **HTML** for your own Next.js UI.
+*   **Route Handlers** run on the server to handle HTTP requests and return **data or non-HTML responses** for any consumer (browser client, mobile app, third-party service).
+
+#### The Key Anti-Pattern to Avoid
+Do **NOT** create a Route Handler just to fetch data inside a Server Component:
+```javascript
+// ❌ WRONG: Server Component calling your own API
+const res = await fetch('http://localhost:3000/api/products');
+
+// ✅ CORRECT: Server Component queries DB directly
+const products = await db.query('SELECT * FROM products');
+```
+</details>
+
+<details>
+<summary><b>13. Route Handler File Conventions</b></summary>
+
+Route Handlers are **only available in the App Router** (`app/` directory). They use a `route.js` file (not `page.js`).
+
+#### File Naming & URL Mapping
+*   The file must be named exactly **`route.js`** (or `route.ts`).
+*   The URL corresponds to the folder structure:
+
+| File Path | URL |
+| :--- | :--- |
+| `app/api/hello/route.js` | `/api/hello` |
+| `app/api/users/[id]/route.js` | `/api/users/15` |
+| `app/api/products/[...slug]/route.js` | `/api/products/shoes/nike` |
+
+#### HTTP Method Exports
+Export named async functions matching the HTTP verb:
+```javascript
+// app/api/posts/route.js
+export async function GET(request) { ... }     // Fetch data
+export async function POST(request) { ... }    // Create resource
+export async function PUT(request) { ... }     // Update resource
+export async function DELETE(request) { ... }  // Delete resource
+```
+Unimplemented methods return `405 Method Not Allowed` automatically.
+
+#### Critical Rule: No `page.js` and `route.js` in the Same Folder
+They both resolve the same URL path and will conflict. Always place API routes under `app/api/`.
+</details>
+
+<details>
+<summary><b>14. The Web Request & Response APIs</b></summary>
+
+Next.js Route Handlers use **standardized Web APIs** for handling HTTP communication. These are platform-agnostic interfaces defined by the WHATWG standard — they work identically in the browser, Node.js, Deno, and Cloudflare Workers.
+
+#### The `Request` Object
+The standardized incoming package containing everything about the HTTP call:
+```javascript
+export async function GET(request) {
+  const url = new URL(request.url);
+  const page = url.searchParams.get('page');     // Query params
+  const auth = request.headers.get('Authorization'); // Headers
+}
+export async function POST(request) {
+  const body = await request.json();             // Parse JSON body
+}
+```
+
+#### The `Response` Object
+The standardized outgoing package sent back to the caller:
+```javascript
+return Response.json({ data });                  // JSON (most common)
+return Response.json({ error: 'Not Found' }, { status: 404 }); // Custom status
+return new Response('<h1>Hi</h1>', { headers: { 'Content-Type': 'text/html' } });
+return Response.redirect('http://localhost:3000/login', 307);   // Redirect
+```
+
+#### Next.js Extensions (`NextRequest` / `NextResponse`)
+Next.js wraps the standard APIs with convenience helpers:
+
+| Feature | Standard API | NextRequest/NextResponse |
+| :--- | :--- | :--- |
+| Query params | `new URL(req.url).searchParams` | `request.nextUrl.searchParams` |
+| Read cookies | Manual header string parsing | `request.cookies.get('token')` |
+| Set cookies | Manual `Set-Cookie` headers | `response.cookies.set('token', value)` |
+| Internal rewrite | ❌ | `NextResponse.rewrite(url)` |
+</details>
+
+<details>
+<summary><b>15. When to Use Route Handlers (vs. Server Components)</b></summary>
+
+| Scenario | Use Server Component | Use Route Handler |
+| :--- | :---: | :---: |
+| Fetch data to render your own Next.js UI | ✅ | ❌ |
+| Client Component user interaction (POST/DELETE/PUT) | ❌ | ✅ |
+| Third-party webhook (Stripe, Auth0, GitHub) | ❌ | ✅ |
+| Mobile app / external consumer needs a JSON API | ❌ | ✅ |
+| Non-HTML response (CSV, PDF, generated image) | ❌ | ✅ |
+| Proxy call with secret API keys (OpenAI, etc.) | ❌ | ✅ |
+
+#### Caching Behavior
+By default, **`GET` Route Handlers are cached** at build time (static). To make them dynamic (re-run on every request):
+1.  Use the `request` parameter (e.g., read query params).
+2.  Access `cookies()` or `headers()` from `next/headers`.
+3.  Export `export const dynamic = 'force-dynamic'`.
+4.  Use any non-GET method (`POST`, `DELETE`, etc.) — these are never cached.
+</details>
+
+<details>
+<summary><b>16. Product Engineering: The API-First Mindset</b></summary>
+
+Route Handlers are more than just "API routes"; they represent the **Open Interface** of your product system.
+
+#### The "Engine" vs. The "Dashboard"
+*   **The Dashboard (UI):** Your `page.js` files. They change frequently based on design trends and user feedback.
+*   **The Engine (Core Logic):** Your `route.js` files. These define the "Truth" of your product (e.g., how an order is processed). 
+*   **Principle:** By keeping the Engine decoupled from the Dashboard, you ensure that a UI redesign never breaks your core business logic.
+
+#### Standardization as Insurance
+Next.js Route Handlers use the **Standard Web Request/Response APIs**. 
+*   **Impact:** Your logic isn't "Next.js code"—it's "Web standard code." This makes your backend logic portable and robust, preventing vendor lock-in and allowing your logic to run on the Edge or in separate microservices with minimal refactoring.
+
+#### The Consumer Spectrum
+A robust product has multiple "customers." While your Next.js frontend is the primary consumer, Route Handlers prepare your system to serve **External Customers** (mobile apps, partners, or webhooks) using the same RESTful interface.
+</details>
+
+<details>
+<summary><b>17. Data as a Stream: Why we <code>await</code> the Body</b></summary>
+
+When a client sends a `POST` request, the data doesn't arrive instantly. It arrives as a **Stream of Bytes** over the network.
+
+#### The Principle of Asynchronous I/O
+*   **Non-Blocking:** Reading the body is an I/O operation. We `await request.json()` so the server can handle other requests while waiting for the network packets to arrive and be parsed.
+*   **Data Integrity:** Awaiting ensures we work with the *complete* payload. If we didn't wait, we might try to process a partial, corrupted version of the data.
+*   **Standardization:** Next.js uses the standard Web `Request` API, making your data-handling logic portable across modern JavaScript runtimes (Deno, Bun, Cloudflare Workers).
+</details>
+
+<details>
+<summary><b>18. The URL as a State Container (Search Parameters)</b></summary>
+
+**Query Parameters** and **Search Parameters** are the same thing. They represent the **UI State** serialized into the URL.
+
+#### Product Impact: The "Sharable Truth"
+*   **Deep Linking:** By storing filters or search terms in the URL (`?q=shoes&sort=price`), users can share exact views with others.
+*   **Browser Durability:** Using Search Params ensures the "Back" button works as expected and the page state survives a refresh.
+
+#### Implementation Distinction
+*   **In Route Handlers:** Extracted via the Web API: `const { searchParams } = new URL(request.url)`.
+*   **In Pages:** Received as an **Async Promise** (Next.js 15+). This allows the static shell of the page to load instantly while the parameters are resolved for dynamic content (Partial Prerendering).
+</details>
