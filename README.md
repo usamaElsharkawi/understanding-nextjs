@@ -194,15 +194,15 @@ In the Next.js App Router, components are divided into two main categories: **Se
     return <div className="client-wrapper">{children}</div>;
     }
 
-        // Page.jsx (Server Component)
-        import ClientComponent from './ClientComponent';
-        import ServerChild from './ServerChild';
-        export default function Page() {
-          return <ClientComponent><ServerChild /></ClientComponent>;
-        }
-        ```
+            // Page.jsx (Server Component)
+            import ClientComponent from './ClientComponent';
+            import ServerChild from './ServerChild';
+            export default function Page() {
+              return <ClientComponent><ServerChild /></ClientComponent>;
+            }
+            ```
 
-    </details>
+</details>
 
 <details>
 <summary><b>10. Server-Side Rendering (SSR) vs. React Server Components (RSC)</b></summary>
